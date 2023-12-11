@@ -35,7 +35,7 @@ N1_per_hour <- filtering %>%
   group_by(time) %>%
   summarise(across(.cols = -c(Time, hour), .fns = mean))
 
-##Ploting 
+## PLOT BIASA WEIIII
 
 #suhu 
 ggplot(N1_per_hour, aes(one_hour_interval,T))+geom_line(stat = 'identity', col='red')+theme_classic()+
@@ -348,5 +348,4 @@ Karbondioksida <-
                    zerolinewidth = 2,
                    gridcolor = 'ffff'),
       plot_bgcolor='#e5ecf6')
-  PMten
-  
+  PMten  
