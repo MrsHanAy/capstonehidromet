@@ -1,0 +1,352 @@
+if (!require("devtools")) install.packages("devtools")
+devtools::install_github("Kohze/fireData", force = TRUE)
+library(remotes)
+library(pkg)
+library(firebase)
+library(fireData)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+
+# Function to process data
+process_data <- function(data) {
+  time_column <- as.POSIXct(names(unlist(data)), format = '%Y.%m.%d.%H:%M:%S')
+  df <- read.csv(text = unname(unlist(data)), header = FALSE, sep = ';') |>
+    setNames(c("Temperature", "RH(%)", "CO", "CO2", "CH2O", "O3", "NO2", "VOC", "PM1", "PM2.5", "PM10", "Battery"))
+  df$Time <- as.Date(time_column)  # Extract only the date part
+  df$hour <- format(time_column, "%H:%M:%S")
+  df$time <- cut(time_column, breaks = "1 hours", labels = FALSE)
+  df$time <- floor_date(time_column, "1 hours")
+  return(df[order(df$Time), ])  # Order rows by Time
+}
+# Firebase configuration
+api_key <- "AIzaSyA60Dr9Zi7hubjqtftPp0VI-Y0KVzs1m78"
+db_url <- "https://pplh-ipb-default-rtdb.firebaseio.com"
+project_id <- "pplh-ipb"
+project_domain <- "pplh-ipb.firebaseapp.com"
+
+# Download data
+test1 <- download(projectURL = db_url, fileName = "data")
+
+# Process data for N1, N3, and N5 and order by Time
+N1 <- process_data(test1$N1)
+filtering = N1 %>% filter(time > "2023-11-15 00:00:00")
+N1_per_hour <- filtering %>% 
+  group_by(time) %>%
+  summarise(across(.cols = -c(Time, hour), .fns = mean))
+
+##Ploting 
+
+#suhu 
+ggplot(N1_per_hour, aes(one_hour_interval,T))+geom_line(stat = 'identity', col='red')+theme_classic()+
+  xlab("date")+ ylab('Suhu Udara (degree Celcius)')
+
+#Kelembaban udara 
+ggplot(N1_per_hour, aes(one_hour_interval,RH))+geom_line(stat = 'identity', col='green')+theme_classic()+
+  xlab("date")+ ylab('Kelembaban (%)')
+
+#CO
+ggplot(N1_per_hour, aes(one_hour_interval,CO))+geom_line(stat = 'identity', col='black')+theme_classic()+
+  xlab("date")+ ylab('part per Million (ppm)')
+
+#O3
+ggplot(N1_per_hour, aes(one_hour_interval,O3))+geom_line(stat = 'identity', col='black')+theme_classic()+
+  xlab("date")+ ylab('part per Million (ppm)')
+
+#NO2
+ggplot(N1_per_hour, aes(one_hour_interval,NO2))+geom_line(stat = 'identity', col='blue')+theme_classic()+
+  xlab("date")+ ylab('part per Million (ppm)')
+
+#VOC
+ggplot(N1_per_hour, aes(one_hour_interval,VOC))+geom_line(stat = 'identity', col='blue')+theme_classic()+
+  xlab("date")+ ylab('Grades')
+
+#PM1
+ggplot(N1_per_hour, aes(one_hour_interval,PM1))+geom_line(stat = 'identity', col='blue')+theme_classic()+
+  xlab("date")+ ylab('mikro gram/m3')
+
+#PM2.5 
+ggplot(N1_per_hour, aes(one_hour_interval,PM2.5))+geom_line(stat = 'identity', col='blue')+theme_classic()+
+  xlab("date")+ ylab('mikro gram/m3')
+
+#PM10
+ggplot(N1_per_hour, aes(one_hour_interval,PM10))+geom_line(stat = 'identity', col='blue')+theme_classic()+
+  xlab("date")+ ylab('mikro gram/m3')
+
+
+#plotly
+install.packages("plotly")
+library(plotly)
+#suhu
+suhu <- plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+  add_trace(x = ~time, y = ~Temperature) %>%
+  layout(showlegend = F, colorway="blue",
+         xaxis = list(rangeslider = list(visible = T),
+                      rangeselector=list(
+                        buttons=list(
+                          list(count=1, label="1h", step="hour", stepmode="backward"),
+                          list(count=6, label="6h", step="hour", stepmode="backward"),
+                          list(count=1, label="Day", step="day", stepmode="todate"),
+                          list(count=1, label="1m", step="month", stepmode="backward"),
+                          list(step="all")
+                        ))))
+  suhu <- suhu %>%
+    layout(
+    xaxis = list(zerolinecolor = '#ffff',
+                 zerolinewidth = 2,
+                 gridcolor = 'ffff'),
+    yaxis = list(zerolinecolor = '#ffff',title="Temperature(°C)",
+                 zerolinewidth = 2,
+                 gridcolor = 'ffff'),
+    plot_bgcolor='#e5ecf6')
+suhu 
+
+#RH
+Kelembaban <- plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~RH) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Kelembaban <- Kelembaban %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="Relative Humidity(%)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Kelembaban 
+
+#CO2
+Karbondioksida <-
+  plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~CO2) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Karbondioksida <- Karbondioksida %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="CO2(ppm)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Karbondioksida 
+
+#CO
+  Karbonmonoksida <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~CO) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Karbonmonoksida <- Karbonmonoksida %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="CO(ppm)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Karbonmonoksida
+
+#CH2O
+  CH2Oppm <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~CH2O) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  CH2Oppm <- CH2Oppm %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="CH2O(mg/m3)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  CH2Oppm
+
+#O3
+  Ozon <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~O3) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Ozon <- Ozon %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="O3(ppm)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Ozon
+
+#NO2
+  Nitrogendioksida <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~NO2) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Nitrogendioksida <- Nitrogendioksida %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="NO2(ppm)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Nitrogendioksida
+
+#VOC
+  Volatile <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~VOC) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  Volatile <- Volatile %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="VOC(grades)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  Volatile
+
+#PM1
+  PMone <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~PM1) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  PMone <- PMone %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="PM1 (μg/m3)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  PMone
+
+#PM2.5
+  PMtwo.five <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~PM2.5) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  PMtwo.five <- PMtwo.five %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="PM2.5 (μg/m3)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  PMtwo.five
+
+#PM10
+  PMten <-
+    plot_ly(N1_per_hour, type = 'scatter', mode = 'lines')%>%
+    add_trace(x = ~time, y = ~PM10) %>%
+    layout(showlegend = F,colorway="blue",
+           xaxis = list(rangeslider = list(visible = T),
+                        rangeselector=list(
+                          buttons=list(
+                            list(count=1, label="1h", step="hour", stepmode="backward"),
+                            list(count=6, label="6h", step="hour", stepmode="backward"),
+                            list(count=1, label="Day", step="day", stepmode="todate"),
+                            list(count=1, label="1m", step="month", stepmode="backward"),
+                            list(step="all")
+                          ))))
+  PMten <- PMten %>%
+    layout(
+      xaxis = list(zerolinecolor = '#ffff',
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      yaxis = list(zerolinecolor = '#ffff',title="PM10 (μg/m3)",
+                   zerolinewidth = 2,
+                   gridcolor = 'ffff'),
+      plot_bgcolor='#e5ecf6')
+  PMten
+  
